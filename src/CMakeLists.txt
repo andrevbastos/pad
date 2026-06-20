@@ -17,13 +17,16 @@ foreach(SOURCE_FILE ${PAD_SOURCES})
     # Cria o executável para o arquivo atual
     add_executable(${TARGET_NAME} ${SOURCE_FILE})
 
+    # Flags de compilação rigorosas e otimização
+    target_compile_options(${TARGET_NAME} PRIVATE -O3 -Wall -Wextra -Wpedantic -Werror)
+
     # Linka com os cores das bibliotecas importadas via FetchContent
     target_link_libraries(${TARGET_NAME} PRIVATE 
         ifcg_core 
     )
 
     # Inclui os headers do projeto
-    target_include_directories(${TARGET_NAME} PRIVATE "${PROJECT_SOURCE_DIR}/include")
+    target_include_directories(${TARGET_NAME} SYSTEM PRIVATE "${PROJECT_SOURCE_DIR}/include")
 
     # Copia recursos da engine ifcg para o diretório de build de cada executável (Essencial para Shaders)
     add_custom_command(TARGET ${TARGET_NAME} POST_BUILD

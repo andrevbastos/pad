@@ -99,7 +99,6 @@ int main(int argc, char* argv[]) {
                 runBenchSeq(config.name, config.paramSetter, config.statsSetter, repetitions, numSteps, intensity);
             }
         } else {
-            bool finished = true;
             if (mode == "paralelo") {
                 runEnginePar(config.name, config.paramSetter, config.statsSetter, repetitions, numSteps, intensity);
             } else {
@@ -148,13 +147,13 @@ void runBenchPar(std::string testName, Param paramSetter, Stats statsSetter, uin
     std::string path = folderPath + "/" + testName;
     fs::create_directories(path);
     
-    for (int step = 0; step < numSteps; ++step) {
+    for (uint step = 0; step < numSteps; ++step) {
         std::vector<NoiseConfig> configs(repetitions);
         std::vector<double> times(repetitions);
         
         int tarefasConcluidas = 0;
 
-        for (int rep = 0; rep < repetitions; ++rep) {
+        for (uint rep = 0; rep < repetitions; ++rep) {
             tm.addTask([step, rep, tarefasPorPasso, paramSetter, intensity, path, &configs, &times, &mainMtx, &mainCv, &tarefasConcluidas, &tm]() {
                 NoiseConfig config = paramSetter(step);
                 configs[rep] = config;
@@ -197,9 +196,6 @@ void runBenchPar(std::string testName, Param paramSetter, Stats statsSetter, uin
 void runEngineSeq(std::string testName, Param paramSetter, Stats statsSetter, uint repetitions, uint numSteps, uint intensity) {
     ifcg::Engine::init(800, 800, "PAD - Engine Sequencial");
     ifcg::Engine::setup3D();
-
-    auto& renderer {Engine::getRenderer()};
-    GLuint shader {renderer.getShaderID()};
 
     Statistics stats(numSteps * repetitions);
 
@@ -264,18 +260,11 @@ void runEnginePar(std::string testName, Param paramSetter, Stats statsSetter, ui
     ifcg::Engine::init(800, 800, "PAD - Engine Paralelo");
     ifcg::Engine::setup3D();
 
-    auto& renderer {Engine::getRenderer()};
-    GLuint shader {renderer.getShaderID()};
-
     Statistics stats(numSteps * repetitions);
     TaskMaster tm(false);
 
     auto path = folderPath + "/" + testName;
     fs::create_directories(path);
-
-    uint currentStep = 0;
-    uint currentRep = 0;
-    bool taskInProgress = false;
 
     auto lastTime = std::chrono::high_resolution_clock::now();
     double fps = 0.0;

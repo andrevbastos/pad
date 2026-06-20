@@ -212,7 +212,7 @@ A concorrência moderna em C++20 baseia-se em `std::jthread`, que gerencia o cic
 
 = Metodologia
 
-Para avaliar o impacto do processamento paralelo na geração das malhas, desenvolveu-se uma arquitetura baseada no padrão _Task Scheduler_. A metodologia adotada divide-se na implementação estrutural do escalonador, na instrumentação para coleta de dados de desempenho e na definição de cenários de teste isolados.
+Para avaliar o impacto do processamento paralelo na geração das malhas, desenvolveu-se uma arquitetura baseada no padrão _Task Scheduler_. A metodologia adotada divide-se na implementação estrutural do escalonador, na instrumentação para coleta de dados de desempenho e na definição de cenários de teste isolados. Todas as implementações realizadas estão disponíveis no repositório público do projeto #footnote[https://github.com/andrevbastos/pad].
 
 == Ambiente de Teste e Ferramentas
 
