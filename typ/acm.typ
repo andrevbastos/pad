@@ -158,6 +158,11 @@
       name: "Ricardo de la Rocha Ladeira",
       affiliation: [Instituto Federal de Educação, Ciência e Tecnologia Catarinense \ Campus Blumenau],
       email: "ricardo.ladeira@ifc.edu.br"
+    ),
+    (
+      name: "Paulo Cesar Rodacki Gomes",
+      affiliation: [Instituto Federal de Educação, Ciência e Tecnologia Catarinense \ Campus Blumenau],
+      email: "paulo.gomes@ifc.edu.br"
     )
   ),
   abstract: [
@@ -229,7 +234,7 @@ Para avaliar os algoritmos, estruturou-se quatro cenários que cruzam isolamento
 - *Engine Sequential (ES):* Integração com motor gráfico rodando na thread principal, mensurando o impacto no FPS.
 - *Engine Parallel (EP):* Geração assíncrona concorrente com envio de buffers para o motor.
 
-Avaliou-se a *Escala* (malha de 100x100 a 1000x1000 vértices) e as *Oitavas* (1 a 10 camadas de ruído) com 100 amostras por nível de complexidade, resultando em 1000 amostras por avaliação (Escala ou Oitavas). A dimensão amostral atende ao Teorema do Limite Central, garantindo normalidade das médias para a aplicação dos testes paramétricos de ANOVA e Tukey @montgomery2017design.
+Avaliou-se a *Escala* (malha de 100x100 a 1000x1000 vértices) e as *Oitavas* (1 a 10 camadas de ruído) com 100 amostras por nível de complexidade, resultando em 1000 amostras por avaliação (Escala ou Oitavas). A dimensão amostral atende ao Teorema do Limite Central, garantindo normalidade das médias para a aplicação dos testes paramétricos de ANOVA e Tukey @jurandir.
 
 == Instrumentação e Coleta de Dados
 
@@ -338,7 +343,7 @@ Para tratar esses pontos de dados discrepantes de forma matematicamente rigorosa
 
 == Comparação de benchmark
 
-Para os testes de benchmark, as médias dos modos BS e BP foram comparadas estatisticamente através de ANOVA de dois fatores e teste pós-hoc de Tukey com nível de significância $alpha = 0,05$, adotando-se a Escala e o Número de Oitavas como fatores independentes @montgomery2017design.
+Para os testes de benchmark, as médias dos modos BS e BP foram comparadas estatisticamente através de ANOVA de dois fatores e teste pós-hoc de Tukey com nível de significância $alpha = 0,05$, adotando-se a Escala e o Número de Oitavas como fatores independentes @jurandir.
 
 Os resultados detalhados dos benchmarks puros (BS e BP) em função da escala e do número de oitavas são apresentados na @tab:escala_pure e na @tab:oitavas_pure. Observa-se que, para a geração de uma única malha isolada, o modo sequencial é cerca de duas vezes mais rápido que o paralelo em todos os cenários. Na escala de $100 times 100$ vértices, o tempo médio foi de 25,41 ms (BS) contra 55,32 ms (BP) (speedup de 0,46x), enquanto na escala de $1000 times 1000$ o tempo sequencial registrou 2.295,97 ms frente a 4.859,25 ms do paralelo (speedup de 0,47x). Esse comportamento se repete no teste de oitavas, com speedups variando de 0,44x (1 oitava) a 0,51x (10 oitavas).
 \
@@ -413,12 +418,12 @@ Para avaliar de forma cientificamente se as diferenças observadas entre os temp
 - *Hipótese Alternativa ($H_1$):* Há uma diferença estatisticamente significativa entre as médias de tempo de geração dos modos.
 \
 #v(-1em)
-Primeiramente, aplicou-se a ANOVA de duas vias para avaliar a influência isolada do modo de execução (Sequencial ou Paralelo), do valor do parâmetro (Escala ou Oitavas) e sua interação @montgomery2017design:
+Primeiramente, aplicou-se a ANOVA de duas vias para avaliar a influência isolada do modo de execução (Sequencial ou Paralelo), do valor do parâmetro (Escala ou Oitavas) e sua interação @jurandir:
 - *Experimento de Escala:* Revelou efeitos muitos significativos para todos os fatores. O fator modo de execução obteve $text("p-valor") < 0,001$, o fator Escala registrou $text("p-valor") < 0,001$ e a interação entre ambos alcançou $text("p-valor") < 0,001$.
 - *Experimento de Oitavas:* Também demonstrou significância estatística. O fator Modo registrou $text("p-valor") < 0,001$, o fator Oitavas registrou $text("p-valor") < 0,001$, enquanto o fator de interação obteve $text("p-valor") < 0,001$.
 \
 #v(-1em)
-A forte significância estatística da interação ($text("p-valor") < 0,001$) em ambos os experimentos aponta que a diferença de desempenho entre os modos Sequencial e Paralelo depende diretamente do nível do parâmetro avaliado. Para isolar essas diferenças específicas em cada nível, aplicou-se o teste pós-hoc de Tukey @montgomery2017design.
+A forte significância estatística da interação ($text("p-valor") < 0,001$) em ambos os experimentos aponta que a diferença de desempenho entre os modos Sequencial e Paralelo depende diretamente do nível do parâmetro avaliado. Para isolar essas diferenças específicas em cada nível, aplicou-se o teste pós-hoc de Tukey @jurandir.
 
 No experimento de Escala, constatou-se que para grids pequenos de $100 times 100$ ($text("p-valor") = 1,00$) e $200 times 200$ ($text("p-valor") = 0,79$), *a diferença entre os modos não é estatisticamente significativa*. Nesses cenários, os dois algoritmos comportam-se de forma equivalente. Porém, a partir da escala $300 times 300$ até a escala máxima de $1000 times 1000$, a hipótese nula $H_0$ foi consistentemente rejeitada ($text("p-valor") < 0,05$), provando estatísticamente o atraso provocado pelo processamento paralelo de malhas individuais.
 
