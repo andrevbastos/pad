@@ -131,7 +131,7 @@
 
   if keywords.len() > 0 {
     block(width: 100%, below: 1.5em)[
-      #text(weight: "bold")[Keywords: ]
+      #text(weight: "bold")[Palavras-chave: ]
       #keywords.join(", ")
     ]
   }
@@ -158,21 +158,25 @@
       name: "Ricardo de la Rocha Ladeira",
       affiliation: [Instituto Federal Catarinense \ Campus Blumenau],
       email: "ricardo.ladeira@ifc.edu.br"
+    ),
+    (
+      name: "Paulo Cesar Rodacki Gomes",
+      affiliation: [Instituto Federal Catarinense \ Campus Blumenau],
+      email: "paulo.gomes@ifc.edu.br"
     )
   ),
   abstract: [
-    A geração procedural e a extração geométrica de malhas 3D (tridimensionais) densas impõem desafios arquiteturais críticos, frequentemente sobrecarregando a _thread_ principal e degradando a fluidez da renderização gráfica. Este artigo apresenta uma arquitetura assíncrona baseada no padrão _Task Scheduler_, implementada em C++20, para gerenciar a geração e preparação concorrente de terrenos baseados em Ruído de Perlin. O estudo demonstra como o isolamento do contexto OpenGL e o uso de filas de prioridade multinível otimizam a aquisição de dados e mantêm a estabilidade do da taxa de quadros em simulações intensivas.
+    A geração procedural e a extração geométrica de malhas 3D (tridimensionais) densas impõem desafios arquiteturais críticos, frequentemente sobrecarregando a _thread_ principal e degradando a fluidez da renderização gráfica. Este artigo apresenta uma arquitetura assíncrona baseada no padrão _Task Scheduler_, implementada em C++20, para gerenciar a geração e preparação concorrente de terrenos baseados em Ruído de Perlin. O estudo demonstra como o isolamento do contexto OpenGL e o uso de filas de prioridade multinível otimizam a aquisição de dados e mantêm a estabilidade da taxa de quadros em simulações intensivas.
   ],
   ccs-concepts: (
     "Computing methodologies ~ Rendering",
     "Computing methodologies ~ Concurrent computing methodologies"
   ),
   keywords: (
-    "Procedural Generation", "C++20", "Graphics Engine", "Concurrent Programming", "OpenGL"
+    "Geração Procedural", "C++20", "Motor Gráfico", "Programação Concorrente", "OpenGL"
   )
 )
 
-// ITALICO!!!
 = Introdução
 
 Numa versão sequencial convencional, gerar terrenos de forma procedural e preparar malhas 3D complexas, como visto na @fig:mesh_example, são tarefas executadas diretamente na _thread_ principal, sobrecarregando-a quando ocorrem junto ao laço de renderização. Isso faz com que a taxa de quadros por segundo (FPS) caia drasticamente, podendo causar travamentos na aplicação.
@@ -185,11 +189,11 @@ Numa versão sequencial convencional, gerar terrenos de forma procedural e prepa
 ]<fig:mesh_example>
 \
 
-Motores gráficos que usam a interface OpenGL#footnote[https://www.opengl.org/] sofrem ainda mais com esse problema. Por design, o contexto OpenGL é vinculado a uma única _thread_, exigindo que o laço de desenho e as alterações de estado dos gráficos aconteçam exclusivamente na _thread_ principal @learnopengl. Se essa mesma _thread_ tiver que parar para calcular um mapa de ruído ou gerar a geometria da malha em uma abordagem sequencial, a renderização é interrompida. Portanto, é preciso isolar o processamento pesado para garantir que a interface continue responsiva.
+Motores gráficos que usam a interface OpenGL#footnote[https://www.opengl.org/] sofrem ainda mais com esse problema. Por _design_, o contexto OpenGL é vinculado a uma única _thread_, exigindo que o laço de desenho e as alterações de estado dos gráficos aconteçam exclusivamente na _thread_ principal @learnopengl. Se essa mesma _thread_ tiver que parar para calcular um mapa de ruído ou gerar a geometria da malha em uma abordagem sequencial, a renderização é interrompida. Portanto, é preciso isolar o processamento pesado para garantir que a interface continue responsiva.
 
 Para resolver isso, este artigo apresenta uma abordagem paralela baseada no padrão _Task Scheduler_ @concurrency desenvolvido com os recursos modernos do C++20. O sistema utiliza filas de prioridade multinível para organizar a criação dos mapas de altura via Ruído de Perlin e a extração das malhas em _threads_ de segundo plano (trabalhadoras), deixando a _thread_ principal livre apenas para as chamadas gráficas e delegação das tarefas.
 
-A contribuição deste trabalho é demonstrar como essa arquitetura consegue separar a renderização da preparação dos dados de forma eficiente. Além disso, mostra-se como o uso de `std::jthread` e _smart pointers_ facilita o gerenciamento de memória em sistemas paralelos, evitando erros críticos e garantindo que o motor gráfico continue rodando de forma fluida mesmo durante simulações intensas.
+A contribuição deste trabalho é demonstrar como essa arquitetura consegue separar a renderização da preparação dos dados de forma eficiente. Além disso, mostra-se como o uso de `std::jthread` e ponteiros inteligentes (_smart pointers_) facilita o gerenciamento de memória em sistemas paralelos, evitando erros críticos e garantindo que o motor gráfico continue rodando de forma fluida mesmo durante simulações intensas.
 
 = Fundamentação Teórica
 
@@ -209,16 +213,19 @@ O padrão Monitor é um mecanismo de sincronização de alto nível que garante 
 
 == Agendamento de Tarefas (_Task Scheduler_)
 
-Um _Task Scheduler_ é um componente de software responsável por gerenciar a execução de tarefas concorrentes. Ele mantém uma fila de tarefas pendentes e um conjunto de threads (_thread pool_) que processam essas tarefas em paralelo @ladeira. O _Task Scheduler_ é projetado para otimizar o uso dos recursos do sistema, garantindo que as tarefas pesadas de geração de terrenos sejam delegadas para threads trabalhadoras.
+Um _Task Scheduler_ é um componente de _software_ responsável por gerenciar a execução de tarefas concorrentes. Ele mantém uma fila de tarefas pendentes e um conjunto de _threads_ (_thread pool_) que processam essas tarefas em paralelo @ladeira. O _Task Scheduler_ é projetado para otimizar o uso dos recursos do sistema, garantindo que as tarefas pesadas de geração de terrenos sejam delegadas para _threads_ trabalhadoras.
 
-// Figura com exemplos e explicar
 === Filas multinível
 
-Filas multinível são estruturas de dados que organizam elementos em diferentes níveis de importância. No contexto do agendamento de tarefas, essa estrutura permite que as _threads_ trabalhadoras priorizem a execução de rotinas críticas em detrimento de tarefas secundárias.
+Filas multinível são estruturas de dados que organizam elementos em diferentes níveis de importância. No contexto do agendamento de tarefas, essa estrutura permite que as threads trabalhadoras priorizem a execução de rotinas críticas em detrimento de tarefas secundárias.
+
+Essas estruturas são implementadas como um array de filas, onde cada índice representa um nível de prioridade. O consumidor verifica as filas em ordem decrescente de prioridade, garantindo que tarefas de maior importância sejam processadas antes das de menor relevância.
+
+Considerando uma fila de 3 níveis de prioridade: Alta, Média e Baixa, tarefas de nível alto podem ser processos de importância imediata como cliques na interface (UI), cálculos críticos e áudio em tempo real. Em contrapartida, as de nível médio incluem rotinas com tolerância a pequenas latências, como consultas a bancos de dados e requisições web. Por fim, as de nível baixo são reservadas para processos em segundo plano, como garbage collection, backups e envio de logs.
 
 == Concorrência e Segurança de Memória em C++20
 
-A concorrência moderna em C++20 baseia-se em `std::jthread`, que gerencia o ciclo de vida das threads via RAII (Aquisição de Recurso é Inicialização), e `std::stop_token`, para interrupções cooperativas. A sincronização passiva de espera é realizada via `std::condition_variable_any`. Para garantir a segurança de memória contra condições de corrida e falhas de segmentação (`SIGSEGV`), é recomendado o uso de ponteiros brutos por referências e ponteiros inteligentes (`std::unique_ptr` e `std::shared_ptr`), automatizando o controle de tempo de vida dos recursos compartilhados.
+A concorrência moderna em C++20 baseia-se em `std::jthread`, que gerencia o ciclo de vida das _threads_ via _RAII_ (Aquisição de Recursos é Inicialização), e `std::stop_token`, para interrupções cooperativas. A sincronização passiva de espera é realizada via `std::condition_variable_any`. Para garantir a segurança de memória contra condições de corrida e falhas de segmentação (`SIGSEGV`), é recomendada a substituição de ponteiros brutos por referências e ponteiros inteligentes (`std::unique_ptr` e `std::shared_ptr`), automatizando o controle de tempo de vida dos recursos compartilhados.
 
 = Metodologia
 
@@ -226,7 +233,7 @@ Para avaliar o impacto do processamento paralelo na geração das malhas, desenv
 
 == Ambiente de Teste e Ferramentas
 
-O hardware de testes consiste em um processador Intel Core i5-1235U (12 _threads_, frequência máxima de 4.40 GHz), 16 GB de memória RAM e GPU integrada Intel Iris Xe Graphics. O sistema operacional base é o Arch Linux (Kernel 6.15.9).
+O _hardware_ de testes consiste em um processador Intel Core i5-1235U (12 _threads_, frequência máxima de 4.40 GHz), 16 GB de memória RAM e GPU integrada Intel Iris Xe Graphics. O sistema operacional base é o Arch Linux (_kernel_ 6.15.9).
 
 O código-fonte em C++20 foi compilado via GCC com otimização de tempo de execução `-O3` e diretrizes rigorosas (`-Wall`, `-Wextra`, `-Wpedantic` e `-Werror`). A renderização gráfica e o laço de eventos utilizam OpenGL 4.6 e GLFW 3.4, com matemática provida pela biblioteca GLM 1.0.3 e compilação estruturada via CMake.
 
@@ -234,12 +241,12 @@ O código-fonte em C++20 foi compilado via GCC com otimização de tempo de exec
 
 Para avaliar os algoritmos, estruturou-se quatro cenários que cruzam isolamento e concorrência:
 
-- *Bench Sequential (BS):* Geração sequencial isolada (sem motor gráfico).
-- *Bench Parallel (BP):* Geração concorrente isolada via `TaskMaster`.
-- *Engine Sequential (ES):* Integração com motor gráfico rodando na thread principal, mensurando o impacto no FPS.
-- *Engine Parallel (EP):* Geração assíncrona concorrente com envio de buffers para o motor.
+- *_Bench Sequential_ (BS):* Geração sequencial isolada (sem motor gráfico).
+- *_Bench Parallel_ (BP):* Geração concorrente isolada via `TaskMaster`.
+- *_Engine Sequential_ (ES):* Integração com motor gráfico rodando na _thread_ principal, mensurando o impacto no FPS.
+- *_Engine Parallel_ (EP):* Geração assíncrona concorrente com envio de _buffers_ para o motor.
 
-Avaliou-se a *Escala* (malha de 100x100 a 1000x1000 vértices) e as *Oitavas* (1 a 10 camadas de ruído) com 100 amostras por nível de complexidade, resultando em 1000 amostras por avaliação (Escala ou Oitavas). A dimensão amostral atende ao Teorema do Limite Central, garantindo normalidade das médias para a aplicação dos testes paramétricos de ANOVA e Tukey @montgomery2017design.
+Avaliou-se a *Escala* (malha de 100x100 a 1000x1000 vértices) e as *Oitavas* (1 a 10 camadas de ruído) com 100 amostras por nível de complexidade, resultando em 1000 amostras por avaliação (Escala ou Oitavas). A dimensão amostral atende ao Teorema do Limite Central, garantindo normalidade das médias para a aplicação dos testes paramétricos de ANOVA e Tukey @jurandir.
 
 == Instrumentação e Coleta de Dados
 
@@ -249,13 +256,13 @@ Para a coleta e organização das métricas de desempenho, desenvolveu-se um mó
 
 Para avaliar a eficiência da concorrência, monitorou-se o *Tempo de Extração* (latência na geração do ruído e sua conversão em malha), a *Eficiência do Cache* (taxa de _cache misses_ medida via `perf stat`) e a *Responsividade (FPS)* do laço de renderização. O ganho global de desempenho foi quantificado pelo _speedup_ ($S$), definido pela razão entre o tempo de execução sequencial ($T_text("s")$) e paralelo ($T_text("p")$): $S = T_text("s") / T_text("p")$
 
-== Pipeline de Processamento Sequencial
+== _Pipeline_ de Processamento Sequencial
 
-No pipeline sequencial (modos BS e ES), todas as etapas de geração de ruído e triangulação ocorrem linearmente na _thread_ principal. O processamento segue uma ordem rígida: para cada configuração de teste, o sistema gera o mapa de ruído e realiza a extração de geometria antes de avançar para o próximo quadro ou amostra. As baterias de testes foram organizadas em 10 níveis incrementais de complexidade (passos), variando a escala de 100x100 a 1000x1000 ou o número de oitavas de 1 a 10. Embora funcional para malhas pequenas, o custo acumulado desse processamento síncrono sob alta complexidade bloqueia a _thread_ principal no modo ES, causando engasgos visíveis e quedas de FPS. 
+No _pipeline_ sequencial (modos BS e ES), todas as etapas de geração de ruído e triangulação ocorrem linearmente na _thread_ principal. O processamento segue uma ordem rígida: para cada configuração de teste, o sistema gera o mapa de ruído e realiza a extração de geometria antes de avançar para o próximo quadro ou amostra. As baterias de testes foram organizadas em 10 níveis incrementais de complexidade (passos), variando a escala de 100x100 a 1000x1000 ou o número de oitavas de 1 a 10. Embora funcional para malhas pequenas, o custo acumulado desse processamento síncrono sob alta complexidade bloqueia a _thread_ principal no modo ES, causando engasgos visíveis e quedas de FPS. 
 
 == Arquitetura da Solução Concorrente
 
-Para isolar o processamento pesado e manter a _thread_ principal dedicada à renderização, desenvolveu-se uma arquitetura baseada no padrão _Task Scheduler_, cuja lógica central é encapsulada na classe `TaskMaster` (@fig:task_master). Este componente é responsável por gerenciar a fila de prioridades, administrar o pool de threads trabalhadoras e coordenar a execução concorrente de forma assíncrona.
+Para isolar o processamento pesado e manter a _thread_ principal dedicada à renderização, desenvolveu-se uma arquitetura baseada no padrão _Task Scheduler_, cuja lógica central é encapsulada na classe `TaskMaster` (@fig:task_master). Este componente é responsável por gerenciar a fila de prioridades, administrar o _pool_ de _threads_ trabalhadoras e coordenar a execução concorrente de forma assíncrona.
 
 \
 #figure(
@@ -267,13 +274,13 @@ Para isolar o processamento pesado e manter a _thread_ principal dedicada à ren
 
 === Estrutura do `TaskMaster`
 
-A implementação do `TaskMaster` utiliza um conjunto de três filas de prioridade, representadas pelo `enum class Priority` com os níveis `High` (0), `Medium` (1) e `Low` (2). Essas filas são armazenadas em um `std::array` de `std::queue`, permitindo o acesso direto de cada nível de importância. No contexto desta pesquisa, as tarefas de prioridade `High` compreendem a geração de mapas de altura (ruído), as tarefas `Medium` envolvem a extração geométrica e triangulação da malha 3D correspondente e as tarefas `Low` referem-se à gravação de logs e exportação dos dados estatísticos.
+A implementação do `TaskMaster` utiliza um conjunto de três filas de prioridade, representadas pelo `enum class Priority` com os níveis _High_ (0), _Medium_ (1) e _Low_ (2). Essas filas são armazenadas em um `std::array` de `std::queue`, permitindo o acesso direto de cada nível de importância. No contexto desta pesquisa, as tarefas de prioridade _High_ compreendem a geração de mapas de altura (ruído), as tarefas _Medium_ envolvem a extração geométrica e triangulação da malha 3D correspondente e as tarefas _Low_ referem-se à gravação de logs e exportação dos dados estatísticos.
 
-No construtor da classe, o número de threads trabalhadoras é determinado dinamicamente através de `std::thread::hardware_concurrency()`. Para evitar a saturação completa dos núcleos do processador e garantir que a _thread_ principal (responsável pela renderização e interface) permaneça responsiva, o sistema reserva um núcleo, instanciando $N-1$ threads trabalhadoras. Estas threads são implementadas como objetos `std::jthread`, aproveitando o comportamento RAII para garantir que sejam finalizadas corretamente na destruição do escalonador.
+No construtor da classe, o número de _threads_ trabalhadoras é determinado dinamicamente através de `std::thread::hardware_concurrency()`. Para evitar a saturação completa dos núcleos do processador e garantir que a _thread_ principal (responsável pela renderização e interface) permaneça responsiva, o sistema reserva um núcleo, instanciando $N-1$ _threads_ trabalhadoras. Estas _threads_ são implementadas como objetos _std::jthread_, aproveitando o comportamento _RAII_ para garantir que sejam finalizadas corretamente na destruição do escalonador.
 
-Cada thread trabalhadora executa um loop contínuo que aguarda por novas tarefas utilizando uma `std::condition_variable_any`. A lógica de seleção de tarefas prioriza sempre as filas de maior importância: o trabalhador verifica sequencialmente as filas `High`, `Medium` e `Low`, extraindo a primeira tarefa disponível na fila de maior prioridade encontrada. Isso garante que tarefas críticas, como a geração da malha visível, sejam processadas antes de tarefas de menor impacto, como a exportação de dados estatísticos. 
+Cada _thread_ trabalhadora executa um laço contínuo que aguarda por novas tarefas utilizando uma _std::condition_variable_any_. A lógica de seleção de tarefas prioriza sempre as filas de maior importância: o trabalhador verifica sequencialmente as filas _High_, _Medium_ e _Low_, extraindo a primeira tarefa disponível na fila de maior prioridade encontrada. Isso garante que tarefas críticas, como a geração da malha visível, sejam processadas antes de tarefas de menor impacto, como a exportação de dados estatísticos. 
 
-O loop de execução é projetado para ser interrompido de forma cooperativa através do uso de `std::stop_token`, permitindo que as threads sejam encerradas de forma segura quando o escalonador for destruído ou quando uma interrupção for solicitada. 
+O laço de execução é projetado para ser interrompido de forma cooperativa através do uso de _std::stop_token_, permitindo que as _threads_ sejam encerradas de forma segura quando o escalonador for destruído ou quando uma interrupção for solicitada. 
 
 \
 #align(center)[
@@ -286,12 +293,12 @@ O loop de execução é projetado para ser interrompido de forma cooperativa atr
   ```
 ]\
 
-Em cara iteração, a thread trabalhadora aguarda por uma notificação indicando que uma nova tarefa foi adicionada à fila. A espera é implementada utilizando `std::condition_variable_any`, que bloqueia a thread até que uma tarefa esteja disponível ou até que uma solicitação de parada seja feita.
+Em cada iteração, a _thread_ trabalhadora aguarda por uma notificação indicando que uma nova tarefa foi adicionada à fila. A espera é implementada utilizando _std::condition_variable_any_, que bloqueia a _thread_ até que uma tarefa esteja disponível ou até que uma solicitação de parada seja feita.
 
 \
 #align(center)[
   ```
-  // Bloco de código para uso do lock
+  // Bloco de código para uso do _lock_
   {
     std::unique_lock<std::mutex> lock(mtx);
     auto stopCon = [this]{
@@ -304,7 +311,7 @@ Em cara iteração, a thread trabalhadora aguarda por uma notificação indicand
   ```
 ]
 
-Após ser notificada, a thread trabalhadora verifica as filas de tarefas em ordem de prioridade. A primeira tarefa disponível na fila de maior prioridade é extraída e executada. Se nenhuma tarefa estiver disponível, a thread retorna ao estado de espera. Mesmo que um lock tenha sido adquirido, a função `wait` do `std::condition_variable_any` é projetada para liberar o lock enquanto a thread está bloqueada, permitindo que outras threads adicionem tarefas à fila. Quando a thread é acordada, o lock é automaticamente re-adquirido e destruído com o escopo do bloco.
+Após ser notificada, a _thread_ trabalhadora verifica as filas de tarefas em ordem de prioridade. A primeira tarefa disponível na fila de maior prioridade é extraída e executada. Se nenhuma tarefa estiver disponível, a _thread_ retorna ao estado de espera. Mesmo que um _lock_ tenha sido adquirido, a função `wait` do _std::condition_variable_any_ é projetada para liberar o _lock_ enquanto a _thread_ está bloqueada, permitindo que outras _threads_ adicionem tarefas à fila. Quando a _thread_ é acordada, o _lock_ é automaticamente readquirido e destruído com o escopo do bloco.
 
 \
 #align(center)[
@@ -316,43 +323,42 @@ Após ser notificada, a thread trabalhadora verifica as filas de tarefas em orde
         break;
       }
     }
-  // Fim do bloco de código para uso do lock
+  // Fim do bloco de código para uso do _lock_
   }
 
   if (task) task(st);
   ```
 ]\
 
-O método `addTask` é o ponto de entrada para submissão de tarefas. Através de modelos de programação (_templates_) e metaprogramação em tempo de compilação, ele aceita funções que requerem ou não um `std::stop_token`. Se a função fornecida não aceita o token, ela é encapsulada em uma função lambda que o ignora. O método adquire exclusão mútua via `std::mutex` para inserir a tarefa na fila correta e, em seguida, notifica a `std::condition_variable_any` para acordar uma thread trabalhadora ociosa, prevenindo condições de corrida e garantindo processamento assíncrono imediato.
+O método `addTask` é o ponto de entrada para submissão de tarefas. Através de modelos (_templates_) e metaprogramação em tempo de compilação, ele aceita funções que requerem ou não um _std::stop_token_. Se a função fornecida não aceita o token, ela é encapsulada em uma função _lambda_ que o ignora. O método adquire exclusão mútua via `std::mutex` para inserir a tarefa na fila correta e, em seguida, notifica a _std::condition_variable_any_ para acordar uma _thread_ trabalhadora ociosa, prevenindo condições de corrida e garantindo processamento assíncrono imediato.
 
-Por fim, o ciclo de vida do escalonador é encerrado de forma cooperativa através do seu destrutor (Listagem 3). O uso combinado de `notify_all` para acordar threads bloqueadas e `request_stop` do `std::jthread` garante um encerramento limpo e livre de _deadlocks_.
+Por fim, o ciclo de vida do escalonador é encerrado de forma cooperativa através do seu destrutor (Listagem 3). O uso combinado de `notify_all` para acordar _threads_ bloqueadas e `request_stop` do _std::jthread_ garante um encerramento limpo e livre de _deadlocks_.
 
 === Paralelização da Aquisição de Dados
 
-A paralelização da aquisição de dados divide-se conforme o cenário: no modo EP (Engine Parallel), uma thread trabalhadora gera as malhas e as insere em uma fila assíncrona protegida por `std::mutex` para consumo pelo laço principal da engine, eliminando travamentos gráficos. No modo BP (Bench Parallel), o `TaskMaster` distribui as repetições do benchmark entre as threads secundárias, utilizando `std::mutex` e variáveis de condição para sincronizar o encerramento do passo antes que a thread principal consolide os dados estatísticos.
+A paralelização da aquisição de dados divide-se conforme o cenário: no modo EP (Engine Parallel), uma _thread_ trabalhadora gera as malhas e as insere em uma fila assíncrona protegida por `std::mutex` para consumo pelo laço principal do motor gráfico, eliminando travamentos gráficos. No modo BP (Bench Parallel), o `TaskMaster` distribui as repetições do _benchmark_ entre as _threads_ secundárias, utilizando `std::mutex` e variáveis de condição para sincronizar o encerramento do passo antes que a _thread_ principal consolide os dados estatísticos.
 
-// Apenas nos testes de benchmark
 == Controle de Recursos do Sistema Operacional
 
-Para garantir um ambiente quiescente e mitigar ruídos experimentais @jain1991art, o sistema operacional foi configurado para desativar serviços de segundo plano, operar em modo de console virtual (TTY @lilja2000measuring) e fixar a CPU sob a política de alto desempenho (_performance_). Adicionalmente, os experimentos de benchmark e de engine foram conduzidos de forma alternada ao longo de 5 execuções independentes, com intervalos de resfriamento de 10 segundos, assegurando a estabilização térmica do processador e a consistência das medições.
+Para garantir um ambiente quiescente e mitigar ruídos experimentais para os testes de benchmark @jain1991art, o sistema operacional foi configurado para desativar serviços de segundo plano, operar em modo de console virtual (TTY @lilja2000measuring) e fixar a CPU sob a política de alto desempenho (_performance_). Adicionalmente, os experimentos de _benchmark_ e de motor gráfico foram conduzidos de forma alternada ao longo de 5 execuções independentes, com intervalos de resfriamento de 10 segundos, assegurando a estabilização térmica do processador e a consistência das medições.
 
 
 = Resultados e Discussão
 
-O desempenho dos algoritmos foi avaliado com base nas métricas de tempo de extração, eficiência do cache e responsividade (FPS). Os resultados obtidos demonstram uma melhoria significativa na maior parte dos cenários avaliados quando a arquitetura concorrente é utilizada, sobretudo em termos de vazão global (throughput) e estabilidade do FPS.
+O desempenho dos algoritmos foi avaliado com base nas métricas de tempo de extração, eficiência da memória _cache_ e responsividade (FPS). Os resultados obtidos demonstram uma melhoria significativa na maior parte dos cenários avaliados quando a arquitetura concorrente é utilizada, sobretudo em termos de vazão global (_throughput_) e estabilidade do FPS.
 
 == Tratamento de dados
 
-Mesmo rodando o algoritmo de forma isolada em linha de comando, interrupções temporárias do sistema operacional, oscilações na frequência da CPU (thermal throttling) ou pequenos atrasos de alocação de memória podem gerar picos isolados de latência (outliers) @mytkowicz2009producing.
+Mesmo rodando o algoritmo de forma isolada em linha de comando, interrupções temporárias do sistema operacional, oscilações na frequência da CPU (_thermal throttling_) ou pequenos atrasos de alocação de memória podem gerar picos isolados de latência (_outliers_) @mytkowicz2009producing.
 Para tratar esses pontos de dados discrepantes de forma matematicamente rigorosa (como recomendado para relatórios acadêmicos), implementamos o método da Amplitude Interquartílica (IQR) @bussab2017estatistica:
-- *Detecção*: Para cada configuração de teste (mesma escala/oitava e mesmo modo), calculou-se a amplitude interquartílica. Valores de tempo fora do intervalo das amostras foram classificados como outliers.
-- *Imputação de valores*: Os outliers detectados foram substituídos pela *mediana* do seu respectivo grupo. Isso preserva o tamanho amostral original ($N = 100$) e a tendência central, mas estabiliza o desvio padrão e o erro residual, garantindo que o modelo da ANOVA atenda ao pressuposto de homogeneidade de variância.
+- *Detecção*: Para cada configuração de teste (mesma escala/oitava e mesmo modo), calculou-se a amplitude interquartílica. Valores de tempo fora do intervalo das amostras foram classificados como _outliers_.
+- *Imputação de valores*: Os _outliers_ detectados foram substituídos pela *mediana* do seu respectivo grupo. Isso preserva o tamanho amostral original ($N = 100$) e a tendência central, mas estabiliza o desvio padrão e o erro residual, garantindo que o modelo da ANOVA atenda ao pressuposto de homogeneidade de variância.
 
-== Comparação de benchmark
+== Comparação de _benchmark_
 
-Para os testes de benchmark, as médias dos modos BS e BP foram comparadas estatisticamente através de ANOVA de dois fatores e teste pós-hoc de Tukey com nível de significância $alpha = 0,05$, adotando-se a Escala e o Número de Oitavas como fatores independentes @montgomery2017design.
+Para os testes de _benchmark_, as médias dos modos BS e BP foram comparadas estatisticamente através de ANOVA de dois fatores e teste pós-hoc de Tukey com nível de significância $alpha = 0,05$, adotando-se a Escala e o Número de Oitavas como fatores independentes @jurandir.
 
-Os resultados detalhados dos benchmarks puros (BS e BP) em função da escala e do número de oitavas são apresentados na @tab:escala_pure e na @tab:oitavas_pure. Observa-se que, para a geração de uma única malha isolada, o modo sequencial é cerca de duas vezes mais rápido que o paralelo em todos os cenários. Na escala de $100 times 100$ vértices, o tempo médio foi de 25,41 ms (BS) contra 55,32 ms (BP) (speedup de 0,46x), enquanto na escala de $1000 times 1000$ o tempo sequencial registrou 2.295,97 ms frente a 4.859,25 ms do paralelo (speedup de 0,47x). Esse comportamento se repete no teste de oitavas, com speedups variando de 0,44x (1 oitava) a 0,51x (10 oitavas).
+Os resultados detalhados dos _benchmarks_ puros (BS e BP) em função da escala e do número de oitavas são apresentados na @tab:escala_pure e na @tab:oitavas_pure. Observa-se que, para a geração de uma única malha isolada, o modo sequencial é cerca de duas vezes mais rápido que o paralelo em todos os cenários. Na escala de $100 times 100$ vértices, o tempo médio foi de 25,41 ms (BS) contra 55,32 ms (BP) (_speedup_ de 0,46x), enquanto na escala de $1000 times 1000$ o tempo sequencial registrou 2.295,97 ms frente a 4.859,25 ms do paralelo (_speedup_ de 0,47x). Esse comportamento se repete no teste de oitavas, com _speedups_ variando de 0,44x (1 oitava) a 0,51x (10 oitavas).
 \
 
 #figure(
@@ -373,7 +379,7 @@ Os resultados detalhados dos benchmarks puros (BS e BP) em função da escala e 
     [900x900], [1871,30 ± 1,08], [3967,01 ± 168,51], [0,47x],
     [1000x1000], [2295,97 ± 0,78], [4859,25 ± 207,72], [0,47x],
   ),
-  caption: [Benchmark do tempo de geração de malha em função da escala.],
+  caption: [_Benchmark_ do tempo de geração de malha em função da escala.],
 ) <tab:escala_pure>
 
 #figure(
@@ -394,19 +400,19 @@ Os resultados detalhados dos benchmarks puros (BS e BP) em função da escala e 
     [9], [548,77 ± 0,33], [1089,94 ± 52,81], [0,50x],
     [10], [605,42 ± 0,39], [1192,29 ± 57,34], [0,51x],
   ),
-  caption: [Benchmark do tempo de geração de malha em função das oitavas de ruído.],
+  caption: [_Benchmark_ do tempo de geração de malha em função das oitavas de ruído.],
 ) <tab:oitavas_pure>
 \
 
-A aparente contradição da versão paralela ser mais lenta para processar uma única malha (latência da tarefa) é explicada ao analisar o tempo total necessário para processar o lote completo de testes (vazão ou _throughput_). Enquanto o lote completo de testes (composto por um total de 400 malhas 3D, sendo 200 no teste de escala e 200 no de oitavas) no modo Sequencial levou 250,32 segundos para ser concluído, o modo Paralelo finalizou todo o trabalho em apenas 46,69 segundos — representando um *speedup* global de 5,35x.
+A aparente contradição da versão paralela ser mais lenta para processar uma única malha (latência da tarefa) é explicada ao analisar o tempo total necessário para processar o lote completo de testes (vazão ou _throughput_). Enquanto o lote completo de testes (composto por um total de 400 malhas 3D, sendo 200 no teste de escala e 200 no de oitavas) no modo Sequencial levou 250,32 segundos para ser concluído, o modo Paralelo finalizou todo o trabalho em apenas 46,69 segundos — representando um _speedup_ global de 5,35x.
 
-Essa diferença de comportamento entre a latência unitária e a vazão global deve-se ao fato do `TaskMaster` distribuir as diferentes repetições do benchmark concorrentemente entre os núcleos físicos da CPU. Embora cada thread sofra com o _overhead_ de organização e sincronização, a execução paralela de múltiplas tarefas independentes maximiza o uso do processador.
+Essa diferença de comportamento entre a latência unitária e a vazão global deve-se ao fato do `TaskMaster` distribuir as diferentes repetições do _benchmark_ concorrentemente entre os núcleos físicos da CPU. Embora cada _thread_ sofra com o _overhead_ de organização e sincronização, a execução paralela de múltiplas tarefas independentes maximiza o uso do processador.
 
-Fisicamente, a perda de desempenho individual nas execuções paralela é justificada pela disputa por recursos de memória. Os dados coletados utilizando contadores de hardware (`perf`) apontam que o modo Sequencial apresentou uma taxa de erro de cache (_cache misses_) de $30,93%$, enquanto o modo Paralelo subiu para $36,48%$. A execução simultânea de múltiplas threads de geração de malha força a CPU a realizar acessos frequentes à memória RAM física. Isso resulta em um aumento significativo de _cache misses_, o que explica a queda de desempenho individual. Enquanto o ganho global de vazão é evidenciado pela redução drástica do tempo total necessário para processar o lote completo de malhas.
+Fisicamente, a perda de desempenho individual nas execuções paralelas é justificada pela disputa por recursos de memória. Os dados coletados utilizando contadores de _hardware_ (`perf`) apontam que o modo Sequencial apresentou uma taxa de erro de memória _cache_ (_cache misses_) de $30,93%$, enquanto o modo Paralelo subiu para $36,48%$. A execução simultânea de múltiplas _threads_ de geração de malha força a CPU a realizar acessos frequentes à memória RAM física. Isso resulta em um aumento significativo de _cache misses_, o que explica a queda de desempenho individual. Enquanto o ganho global de vazão é evidenciado pela redução drástica do tempo total necessário para processar o lote completo de malhas.
 
 === Variabilidade
 
-A análise de variabilidade revela comportamentos opostos entre os modos. No modo Sequencial, a dispersão é mínima (desvio padrão de 3,99 ms na escala $1000 times 1000$), gerando boxplots achatados e previsíveis devido à execução linear e isolada no núcleo 2. Em contrapartida, o modo Paralelo apresenta alta dispersão (desvio padrão de 1.059,81 ms para o mesmo cenário), gerando caixas amplas nos boxplots (@fig:escala_boxplot_s e @fig:escala_boxplot_p). Essa instabilidade decorre da concorrência introduzida pelo sistema operacional, onde o agendamento dinâmico de threads do `TaskMaster` causa latências de barramento de memória, trocas de contexto (_context switching_) e disputa por locks de sincronização.
+A análise de variabilidade revela comportamentos opostos entre os modos. No modo Sequencial, a dispersão é mínima (desvio padrão de 3,99 ms na escala $1000 times 1000$), gerando _boxplots_ achatados e previsíveis devido à execução linear e isolada no núcleo 2. Em contrapartida, o modo Paralelo apresenta alta dispersão (desvio padrão de 1.059,81 ms para o mesmo cenário), gerando caixas amplas nos _boxplots_ (@fig:escala_boxplot_s e @fig:escala_boxplot_p). Essa instabilidade decorre da concorrência introduzida pelo sistema operacional, onde o agendamento dinâmico de _threads_ do `TaskMaster` causa latências de barramento de memória, trocas de contexto (_context switching_) e disputa por _locks_ de sincronização.
 
 #figure(
     image("images/plot_escala_boxplot_sequencial.png", width: 80%),
@@ -425,24 +431,24 @@ Para avaliar de forma cientificamente se as diferenças observadas entre os temp
 - *Hipótese Alternativa ($H_1$):* Há uma diferença estatisticamente significativa entre as médias de tempo de geração dos modos.
 \
 #v(-1em)
-Primeiramente, aplicou-se a ANOVA de duas vias para avaliar a influência isolada do modo de execução (Sequencial ou Paralelo), do valor do parâmetro (Escala ou Oitavas) e sua interação @montgomery2017design:
+Primeiramente, aplicou-se a ANOVA de duas vias para avaliar a influência isolada do modo de execução (Sequencial ou Paralelo), do valor do parâmetro (Escala ou Oitavas) e sua interação @jurandir:
 - *Experimento de Escala:* Revelou efeitos muitos significativos para todos os fatores. O fator modo de execução obteve $text("p-valor") < 0,001$, o fator Escala registrou $text("p-valor") < 0,001$ e a interação entre ambos alcançou $text("p-valor") < 0,001$.
 - *Experimento de Oitavas:* Também demonstrou significância estatística. O fator Modo registrou $text("p-valor") < 0,001$, o fator Oitavas registrou $text("p-valor") < 0,001$, enquanto o fator de interação obteve $text("p-valor") < 0,001$.
 \
 #v(-1em)
-A forte significância estatística da interação ($text("p-valor") < 0,001$) em ambos os experimentos aponta que a diferença de desempenho entre os modos Sequencial e Paralelo depende diretamente do nível do parâmetro avaliado. Para isolar essas diferenças específicas em cada nível, aplicou-se o teste pós-hoc de Tukey @montgomery2017design.
+A forte significância estatística da interação ($text("p-valor") < 0,001$) em ambos os experimentos aponta que a diferença de desempenho entre os modos Sequencial e Paralelo depende diretamente do nível do parâmetro avaliado. Para isolar essas diferenças específicas em cada nível, aplicou-se o teste pós-hoc de Tukey @jurandir.
 
-No experimento de Escala, constatou-se que para grids pequenos de $100 times 100$ ($text("p-valor") = 1,00$) e $200 times 200$ ($text("p-valor") = 0,79$), *a diferença entre os modos não é estatisticamente significativa*. Nesses cenários, os dois algoritmos comportam-se de forma equivalente. Porém, a partir da escala $300 times 300$ até a escala máxima de $1000 times 1000$, a hipótese nula $H_0$ foi consistentemente rejeitada ($text("p-valor") < 0,05$), provando estatísticamente o atraso provocado pelo processamento paralelo de malhas individuais.
+No experimento de Escala, constatou-se que para _grids_ pequenos de $100 times 100$ ($text("p-valor") = 1,00$) e $200 times 200$ ($text("p-valor") = 0,79$), *a diferença entre os modos não é estatisticamente significativa*. Nesses cenários, os dois algoritmos comportam-se de forma equivalente. Porém, a partir da escala $300 times 300$ até a escala máxima de $1000 times 1000$, a hipótese nula $H_0$ foi consistentemente rejeitada ($text("p-valor") < 0,05$), provando estatisticamente o atraso provocado pelo processamento paralelo de malhas individuais.
 
 No experimento de Oitavas, a diferença foi significativa em todas as oitavas (de 1 a 10), com a rejeição da hipótese nula ocorrendo de forma estável ($text("p-valor") < 0,001$) para todos os cenários de complexidade.
 
 == Desempenho no motor gráfico
 
-Com a integração do `TaskMaster` ao motor gráfico, o impacto do processamento paralelo na fluidez da renderização foi avaliado através da métrica de FPS. Os resultados indicam que, mesmo com o aumento da latência individual para a geração de cada malha, a arquitetura concorrente permite que a thread principal mantenha uma taxa de quadros estável, evitando quedas bruscas de FPS e travamentos visíveis.
+Com a integração do `TaskMaster` ao motor gráfico, o impacto do processamento paralelo na fluidez da renderização foi avaliado através da métrica de FPS. Os resultados indicam que, mesmo com o aumento da latência individual para a geração de cada malha, a arquitetura concorrente permite que a _thread_ principal mantenha uma taxa de quadros estável, evitando quedas bruscas de FPS e travamentos visíveis.
 
-Nos testes a taxa de quadros por segundo foi limitada a 60 FPS para garantir uma experiência fluida. O modo Sequencial, ao bloquear a thread principal durante a geração da malha, resultou em quedas significativas de FPS, especialmente em configurações de alta complexidade (grids maiores e mais oitavas). Em contraste, o modo Paralelo conseguiu manter a taxa de quadros estável em 60 FPS, mesmo com o aumento da latência de geração, demonstrando a eficácia da arquitetura concorrente em isolar a thread de renderização das tarefas pesadas de processamento.
+Nos testes a taxa de quadros por segundo foi limitada a 60 FPS para garantir uma experiência fluida. O modo Sequencial, ao bloquear a _thread_ principal durante a geração da malha, resultou em quedas significativas de FPS, especialmente em configurações de alta complexidade (_grids_ maiores e mais oitavas). Em contraste, o modo Paralelo conseguiu manter a taxa de quadros estável em 60 FPS, mesmo com o aumento da latência de geração, demonstrando a eficácia da arquitetura concorrente em isolar a _thread_ de renderização das tarefas pesadas de processamento.
 
-Os resultados obtidos no motor gráfico para as variações de escala e de oitavas estão consolidados na @tab:engine_escala e na @tab:engine_oitavas. Fica evidente que, no modo Sequencial, o tempo de geração na thread principal degrada a renderização, derrubando o FPS de 39 (escala $100 times 100$) para inviáveis 0,44 FPS ($1000 times 1000$, com bloqueio de 2,29s) ou 1,65 FPS (10 oitavas). Em contrapartida, o modo Paralelo mantém a taxa estável no limite físico de 60 FPS em todas as configurações, delegando latências de até 3,89s (escala máxima) e 1.042,8 ms (oitavas máxima) a threads secundárias.
+Os resultados obtidos no motor gráfico para as variações de escala e de oitavas estão consolidados na @tab:engine_escala e na @tab:engine_oitavas. Fica evidente que, no modo Sequencial, o tempo de geração na _thread_ principal degrada a renderização, derrubando o FPS de 39 (escala $100 times 100$) para inviáveis 0,44 FPS ($1000 times 1000$, com bloqueio de 2,29s) ou 1,65 FPS (10 oitavas). Em contrapartida, o modo Paralelo mantém a taxa estável no limite físico de 60 FPS em todas as configurações, delegando latências de até 3,89s (escala máxima) e 1.042,8 ms (oitavas máxima) a _threads_ secundárias.
 
 #figure(
   table(
@@ -462,7 +468,7 @@ Os resultados obtidos no motor gráfico para as variações de escala e de oitav
     [900x900], [1871,7], [0,53], [3333,7], [60],
     [1000x1000], [2295,0], [0,44], [3897,5], [60],
   ),
-  caption: [Tempo de processamento e taxa de quadros (FPS) em função da escala na engine gráfica.],
+  caption: [Tempo de processamento e FPS em função da escala no motor gráfico.],
 ) <tab:engine_escala>
 
 #figure(
@@ -483,31 +489,32 @@ Os resultados obtidos no motor gráfico para as variações de escala e de oitav
     [9], [548,0], [1,82], [1010,8], [60],
     [10], [605,4], [1,65], [1042,8], [60],
   ),
-  caption: [Tempo de processamento e taxa de quadros (FPS) em função das oitavas de ruído na engine gráfica.],
+  caption: [Tempo de processamento e FPS em função das oitavas no motor gráfico.],
 ) <tab:engine_oitavas>
-
+\
+#v(-1em)
 A dispersão do FPS obtido durante a simulação por escala pode ser observada na @fig:engine_escala_fps_boxplot_sequencial e na @fig:engine_escala_fps_boxplot_paralelo. Os gráficos contrastam a instabilidade e a perda acentuada de FPS do modo sequencial sob cargas altas com a estabilidade do modo paralelo no limite físico do motor gráfico.
 
 #figure(
   image("images/plot_engine_escala_fps_boxplot_sequencial.png", width: 70%),
-  caption: [Dispersão da taxa de quadros (FPS) por escala no modo Sequencial na engine gráfica.],
+  caption: [Dispersão de FPS por escala no modo Sequencial no motor gráfico.],
 ) <fig:engine_escala_fps_boxplot_sequencial>
 
 #figure(
   image("images/plot_engine_escala_fps_boxplot_paralelo.png", width: 70%),
-  caption: [Dispersão da taxa de quadros (FPS) por escala no modo Paralelo na engine gráfica.],
+  caption: [Dispersão de FPS por escala no modo Paralelo no motor gráfico.],
 ) <fig:engine_escala_fps_boxplot_paralelo>
 \
 
 Cabe notar uma particularidade de visualização na @fig:engine_escala_fps_boxplot_paralelo: embora os limites dos diagramas de caixa (_whiskers_) e do corpo da caixa aparentem cobrir uma grande área da escala vertical, isso é um artefato visual decorrente do ajuste automático de escala do eixo vertical no _software_ de plotagem. Como a variação real do FPS no modo paralelo é quase nula (na ordem de $10^(-1)$ a $10^(-2)$ FPS), o eixo vertical foi ampliado em um intervalo microscópico.
 
-Essa variação quase inexistente de FPS para a maioria das escalas ocorre porque a transferência de malhas pequenas para a GPU consome tempo desprezível da thread principal. Contudo, na escala máxima de $1000 times 1000$ vértices, a malha possui cerca de um milhão de vértices. O envio desse grande volume de dados de vértices é  processado obrigatoriamente pela thread principal de renderização. O _upload_ desse buffer de dados no momento em que a malha fica pronta consome alguns milissegundos do tempo limite do quadro, explicando o desvio padrão de $0,56$ FPS e as oscilações entre $57,8$ e $60,8$ FPS. 
+Essa variação quase inexistente de FPS para a maioria das escalas ocorre porque a transferência de malhas pequenas para a GPU consome tempo desprezível da _thread_ principal. Contudo, na escala máxima de $1000 times 1000$ vértices, a malha possui cerca de um milhão de vértices. O envio desse grande volume de dados de vértices é  processado obrigatoriamente pela _thread_ principal de renderização. O _upload_ desse _buffer_ de dados no momento em que a malha fica pronta consome alguns milissegundos do tempo limite do quadro, explicando o desvio padrão de $0,56$ FPS e as oscilações entre $57,8$ e $60,8$ FPS. 
 
 === O Paradoxo da Responsividade
 
-Embora o modo paralelo resulte em uma maior latência absoluta para concluir uma única tarefa (como visto anteriormente), a delegação desse processamento a threads secundárias pelo `TaskMaster` impede o bloqueio do laço de renderização principal. Assim, para aplicações gráficas interativas em tempo real, a estabilidade e a responsividade mostram-se mais importantes que o tempo bruto de execução do algoritmo de forma isolada.
+Embora o modo paralelo resulte em uma maior latência absoluta para concluir uma única tarefa (como visto anteriormente), a delegação desse processamento a _threads_ secundárias pelo `TaskMaster` impede o bloqueio do laço de renderização principal. Assim, para aplicações gráficas interativas em tempo real, a estabilidade e a responsividade mostram-se mais importantes que o tempo bruto de execução do algoritmo de forma isolada.
 
-=== Métricas de Cache na Engine
+=== Métricas de _Cache_ no Motor Gráfico
 
 Os contadores físicos de CPU coletados via `perf` durante a execução junto ao motor gráfico corroboram as conclusões do benchmark isolado a respeito da disputa por recursos de memória. No modo Sequencial, a taxa de _cache misses_ registrou 32,77%. Sob a execução do modo Paralelo, essa taxa subiu para 41,54%. Essa diferença reforça a explicação de que o processamento paralelo de múltiplas tarefas simultâneas aumenta significativamente a pressão sobre o subsistema de memória, resultando em um aumento substancial de _cache misses_. No entanto, mesmo com essa penalidade de desempenho individual, a arquitetura concorrente do `TaskMaster` permite que a aplicação mantenha uma experiência fluida e responsiva, além de alavancar o desempenho de gerações em massa.
 
@@ -519,13 +526,13 @@ Por fim, o teste pós-hoc de Tukey corroborou que a melhoria de FPS obtida pela 
 
 = Conclusão
 
-Este trabalho apresentou uma arquitetura concorrente assíncrona baseada no padrão _Task Scheduler_ e implementada em C++20 para solucionar o gargalo de processamento na geração procedural de terrenos e extração de malhas 3D integradas a motores gráficos. O objetivo principal foi garantir a estabilidade do FPS delegando tarefas intensivas a threads trabalhadoras secundárias.
+Este trabalho apresentou uma arquitetura concorrente assíncrona baseada no padrão _Task Scheduler_ e implementada em C++20 para solucionar o gargalo de processamento na geração procedural de terrenos e extração de malhas 3D integradas a motores gráficos. O objetivo principal foi garantir a estabilidade do FPS delegando tarefas intensivas a _threads_ trabalhadoras secundárias.
 
 Os resultados experimentais evidenciam que, embora a latência unitária tenha aumentado no modo paralelo devido à disputa de memória, o ganho de vazão alcançou um _speedup_ de 5,35x em lote. No motor gráfico, a arquitetura proposta sustentou a estabilidade em 60 FPS, enquanto o modo sequencial reduziu a renderização a 0,44 FPS sob alta complexidade. A eficácia da paralelização foi corroborada estatisticamente por ANOVA e teste de Tukey ($text("p-valor") < 0,001$).
 
-Do ponto de vista de engenharia de software, o uso dos recursos modernos do C++20 (como `std::jthread`, `std::stop_token` e ponteiros inteligentes) simplificou o gerenciamento do ciclo de vida das threads e garantiu a segurança de memória contra condições de corrida e vazamentos, reduzindo a complexidade do código.
+Do ponto de vista de engenharia de _software_, o uso dos recursos modernos do C++20 (como `std::jthread`, `std::stop_token` e ponteiros inteligentes) simplificou o gerenciamento do ciclo de vida das _threads_ e garantiu a segurança de memória contra condições de corrida e vazamentos, reduzindo a complexidade do código.
 
-Como trabalhos futuros, sugere-se a investigação de técnicas de transferência de dados mais eficientes para a GPU para mitigar o _overhead_ observado no envio de buffers muito grandes da _thread_ principal, utilizando instanceamento (_Instancing_). Adicionalmente, planeja-se estender essa arquitetura assíncrona para a paralelização de outros subsistemas do motor gráfico, como algoritmos de busca de caminho (_pathfinding_).
+Como trabalhos futuros, sugere-se a investigação de técnicas de transferência de dados mais eficientes para a GPU para mitigar o _overhead_ observado no envio de _buffers_ muito grandes da _thread_ principal, utilizando instanciamento (_instancing_). Adicionalmente, planeja-se estender essa arquitetura assíncrona para a paralelização de outros subsistemas do motor gráfico, como algoritmos de busca de caminho (_pathfinding_).
 
 #heading(numbering: none)[Agradecimentos]
 
