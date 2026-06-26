@@ -151,12 +151,12 @@
   authors: (
     (
       name: "André Vitor Bastos de Macêdo",
-      affiliation: [Instituto Federal de Educação, Ciência e Tecnologia Catarinense \ Campus Blumenau],
+      affiliation: [Instituto Federal Catarinense \ Campus Blumenau],
       email: "andre.macedo@estudantes.ifc.edu.br"
     ),
     (
       name: "Ricardo de la Rocha Ladeira",
-      affiliation: [Instituto Federal de Educação, Ciência e Tecnologia Catarinense \ Campus Blumenau],
+      affiliation: [Instituto Federal Catarinense \ Campus Blumenau],
       email: "ricardo.ladeira@ifc.edu.br"
     )
   ),
@@ -172,11 +172,20 @@
   )
 )
 
+// ITALICO!!!
 = Introdução
 
-Numa versão sequencial convencional, gerar terrenos de forma procedural e preparar malhas 3D complexas são tarefas executadas diretamente na _thread_ principal, sobrecarregando-a quando ocorrem junto ao laço de renderização. Isso faz com que a taxa de quadros por segundo (FPS) caia drasticamente, podendo causar travamentos na aplicação.
+Numa versão sequencial convencional, gerar terrenos de forma procedural e preparar malhas 3D complexas, como visto na @fig:mesh_example, são tarefas executadas diretamente na _thread_ principal, sobrecarregando-a quando ocorrem junto ao laço de renderização. Isso faz com que a taxa de quadros por segundo (FPS) caia drasticamente, podendo causar travamentos na aplicação.
 
-Motores gráficos que usam a interface de programação (API, _Application Programming Interface_) OpenGL#footnote[https://www.opengl.org/] sofrem ainda mais com esse problema. Por design, o contexto OpenGL é vinculado a uma única _thread_, exigindo que o laço de desenho e as alterações de estado dos gráficos aconteçam exclusivamente na _thread_ principal @learnopengl. Se essa mesma _thread_ tiver que parar para calcular um mapa de ruído ou gerar a geometria da malha em uma abordagem sequencial, a renderização é interrompida. Portanto, é preciso isolar o processamento pesado para garantir que a interface continue responsiva.
+\
+#figure(
+  caption: [Exemplo de malha 3D],
+)[
+  #image("./images/mesh_from_perlin.png", width: 100%)
+]<fig:mesh_example>
+\
+
+Motores gráficos que usam a interface OpenGL#footnote[https://www.opengl.org/] sofrem ainda mais com esse problema. Por design, o contexto OpenGL é vinculado a uma única _thread_, exigindo que o laço de desenho e as alterações de estado dos gráficos aconteçam exclusivamente na _thread_ principal @learnopengl. Se essa mesma _thread_ tiver que parar para calcular um mapa de ruído ou gerar a geometria da malha em uma abordagem sequencial, a renderização é interrompida. Portanto, é preciso isolar o processamento pesado para garantir que a interface continue responsiva.
 
 Para resolver isso, este artigo apresenta uma abordagem paralela baseada no padrão _Task Scheduler_ @concurrency desenvolvido com os recursos modernos do C++20. O sistema utiliza filas de prioridade multinível para organizar a criação dos mapas de altura via Ruído de Perlin e a extração das malhas em _threads_ de segundo plano (trabalhadoras), deixando a _thread_ principal livre apenas para as chamadas gráficas e delegação das tarefas.
 
@@ -202,6 +211,7 @@ O padrão Monitor é um mecanismo de sincronização de alto nível que garante 
 
 Um _Task Scheduler_ é um componente de software responsável por gerenciar a execução de tarefas concorrentes. Ele mantém uma fila de tarefas pendentes e um conjunto de threads (_thread pool_) que processam essas tarefas em paralelo @ladeira. O _Task Scheduler_ é projetado para otimizar o uso dos recursos do sistema, garantindo que as tarefas pesadas de geração de terrenos sejam delegadas para threads trabalhadoras.
 
+// Figura com exemplos e explicar
 === Filas multinível
 
 Filas multinível são estruturas de dados que organizam elementos em diferentes níveis de importância. No contexto do agendamento de tarefas, essa estrutura permite que as _threads_ trabalhadoras priorizem a execução de rotinas críticas em detrimento de tarefas secundárias.
@@ -245,16 +255,17 @@ No pipeline sequencial (modos BS e ES), todas as etapas de geração de ruído e
 
 == Arquitetura da Solução Concorrente
 
-Para isolar o processamento pesado e manter a _thread_ principal dedicada à renderização, desenvolveu-se uma arquitetura baseada no padrão _Task Scheduler_, cuja lógica central é encapsulada na classe `TaskMaster`. Este componente é responsável por gerenciar a fila de prioridades, administrar o pool de threads trabalhadoras e coordenar a execução concorrente de forma assíncrona.
-
-=== Estrutura do `TaskMaster`
+Para isolar o processamento pesado e manter a _thread_ principal dedicada à renderização, desenvolveu-se uma arquitetura baseada no padrão _Task Scheduler_, cuja lógica central é encapsulada na classe `TaskMaster` (@fig:task_master). Este componente é responsável por gerenciar a fila de prioridades, administrar o pool de threads trabalhadoras e coordenar a execução concorrente de forma assíncrona.
 
 \
 #figure(
   caption: [Diagrama de classes da arquitetura do TaskMaster],
 )[
   #image("./images/task_master.png", width: 100%)
-]\
+]<fig:task_master>
+\
+
+=== Estrutura do `TaskMaster`
 
 A implementação do `TaskMaster` utiliza um conjunto de três filas de prioridade, representadas pelo `enum class Priority` com os níveis `High` (0), `Medium` (1) e `Low` (2). Essas filas são armazenadas em um `std::array` de `std::queue`, permitindo o acesso direto de cada nível de importância. No contexto desta pesquisa, as tarefas de prioridade `High` compreendem a geração de mapas de altura (ruído), as tarefas `Medium` envolvem a extração geométrica e triangulação da malha 3D correspondente e as tarefas `Low` referem-se à gravação de logs e exportação dos dados estatísticos.
 
@@ -320,6 +331,7 @@ Por fim, o ciclo de vida do escalonador é encerrado de forma cooperativa atrav�
 
 A paralelização da aquisição de dados divide-se conforme o cenário: no modo EP (Engine Parallel), uma thread trabalhadora gera as malhas e as insere em uma fila assíncrona protegida por `std::mutex` para consumo pelo laço principal da engine, eliminando travamentos gráficos. No modo BP (Bench Parallel), o `TaskMaster` distribui as repetições do benchmark entre as threads secundárias, utilizando `std::mutex` e variáveis de condição para sincronizar o encerramento do passo antes que a thread principal consolide os dados estatísticos.
 
+// Apenas nos testes de benchmark
 == Controle de Recursos do Sistema Operacional
 
 Para garantir um ambiente quiescente e mitigar ruídos experimentais @jain1991art, o sistema operacional foi configurado para desativar serviços de segundo plano, operar em modo de console virtual (TTY @lilja2000measuring) e fixar a CPU sob a política de alto desempenho (_performance_). Adicionalmente, os experimentos de benchmark e de engine foram conduzidos de forma alternada ao longo de 5 execuções independentes, com intervalos de resfriamento de 10 segundos, assegurando a estabilização térmica do processador e a consistência das medições.
@@ -517,6 +529,6 @@ Como trabalhos futuros, sugere-se a investigação de técnicas de transferênci
 
 #heading(numbering: none)[Agradecimentos]
 
-Os autores agradecem ao assistente de inteligência artificial Antigravity (desenvolvido pelo Google DeepMind) pelo auxílio na revisão textual e ortográfica, estruturação conceitual das ideias e na formatação das tabelas deste artigo. Ressalta-se que toda a concepção do estudo, implementação do software, execução dos experimentos e análise científica contidas neste trabalho são de inteira responsabilidade dos autores.
+Os autores declaram que o assistente de inteligência artificial Antigravity foi utilizado para a revisão textual e ortográfica, a estruturação conceitual das ideias e a formatação das tabelas deste artigo. Ressalta-se que toda a concepção do estudo, implementação do software, execução dos experimentos e análise científica são de inteira responsabilidade dos autores.
 
 #bibliography("referencias_acm.bib", title: "Referências", style: "association-for-computing-machinery") 
